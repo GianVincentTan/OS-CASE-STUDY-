@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CPU Scheduling Simulator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <style>
+    /* Remove default browser spacing and sizing quirks on all elements */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── PAGE BACKGROUND & LAYOUT ─────────────────────────────────────────── */
+    body {
+      background: #f5efe8;           /* warm cream background */
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 400;
+      color: #2e2a26;                /* dark warm-brown text */
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;       /* horizontally center the content */
+      align-items: flex-start;       /* pin to top, not vertically centered */
+      padding: 48px 20px 80px;
+    }
+
+    /* Constrain page width so content doesn't stretch too wide */
+    .wrap {
+      width: 100%;
+      max-width: 860px;
+    }
+
+    /* ── HEADINGS ─────────────────────────────────────────────────────────── */
+
+    /* Large serif title at the top of the page */
+    .page-title {
+      font-family: 'Instrument Serif', serif;
+      font-size: 2.4rem;
+      font-weight: 400;
+      color: #2e2a26;
+      margin-bottom: 4px;
+      letter-spacing: -0.5px;
+    }
+
+    /* Small subtitle/description below the title */
+    .page-sub {
+      font-size: 0.85rem;
+      color: #9a8f86;
+      margin-bottom: 40px;
+    }
+
+    /* Section label (e.g. "Algorithm", "Processes") — small, uppercase, muted */
+    h2 {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 2.5px;
+      color: #b5a99f;
+      margin-bottom: 14px;
+    }
+
+    /* Thin horizontal rule used to separate sections visually */
+    .sep {
+      border: none;
+      border-top: 1px solid #e4dbd3;
+      margin: 36px 0;
+    }
+
+    /* ── ALGORITHM SELECTOR ───────────────────────────────────────────────── */
+
+    /* Wraps the algorithm pill buttons in a flexible row */
+    .algo-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    /* Individual algorithm pill button (default: white, outlined) */
+    .algo-btn {
+      background: #fff;
+      border: 1.5px solid #e4dbd3;
+      border-radius: 100px;          /* fully rounded = pill shape */
+      padding: 8px 18px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: #7a6e66;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+      white-space: nowrap;           /* prevent text from wrapping inside the pill */
+    }
+    .algo-btn:hover { border-color: #c4b5ab; color: #2e2a26; }
+
+    /* Active/selected algorithm pill — dark filled */
+    .algo-btn.active { background: #2e2a26; border-color: #2e2a26; color: #f5efe8; }
+
+    /* ── EXTRA CONTROLS (quantum, priority order) ─────────────────────────── */
+
+    /* Container for optional inputs that appear based on selected algorithm */
+    .extra-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+      margin-top: 16px;
+    }
+
+    /* Wraps a label + input pair vertically */
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+
+    /* Small uppercase label above an input */
+    label {
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #b5a99f;
+    }
+
+    /* Shared style for number inputs and dropdowns */
+    input[type="number"], select {
+      background: #fff;
+      border: 1.5px solid #e4dbd3;
+      color: #2e2a26;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.88rem;
+      outline: none;
+      transition: border-color 0.15s;
+      width: 110px;
+    }
+    input[type="number"]:focus, select:focus { border-color: #b5a99f; }
+
+    /* Dropdowns need to be wider to fit the priority option text */
+    select { width: auto; min-width: 220px; }
+
+    /* ── PROCESS INPUT TABLE ──────────────────────────────────────────────── */
+
+    /* Table where users enter burst time, arrival time, etc. per process */
+    .process-table {
+      width: 100%;
+      border-collapse: collapse;     /* removes gaps between cell borders */
+      margin-bottom: 18px;
+    }
+
+    /* Column header row — small, muted, uppercase */
+    .process-table th {
+      font-size: 0.66rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #b5a99f;
+      padding: 8px 12px;
+      text-align: left;
+      border-bottom: 1px solid #e4dbd3;
+    }
+
+    /* Each data cell — light bottom border between rows */
+    .process-table td { padding: 7px 8px; border-bottom: 1px solid #f0e9e2; }
+
+    /* Constrain number inputs inside the table */
+    .process-table input { width: 86px; }
+
+    /* The process ID cell (e.g. "P1") — bold and slightly larger */
+    .pid-cell { font-weight: 600; font-size: 0.9rem; color: #2e2a26; padding: 7px 12px !important; }
+
+    /* ── ACTION BUTTONS ───────────────────────────────────────────────────── */
+
+    /* Row of buttons below the process table */
+    .action-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+    /* Primary CTA — dark filled "Run simulation" button */
+    .btn-run {
+      background: #2e2a26; color: #f5efe8; border: none; border-radius: 8px;
+      padding: 10px 24px; font-family: 'DM Sans', sans-serif; font-size: 0.85rem;
+      font-weight: 600; cursor: pointer; transition: opacity 0.15s;
+    }
+    .btn-run:hover { opacity: 0.8; }
+
+    /* Secondary outlined button — "Reset" */
+    .btn-ghost {
+      background: transparent; border: 1.5px solid #e4dbd3; color: #9a8f86;
+      border-radius: 8px; padding: 9px 20px; font-family: 'DM Sans', sans-serif;
+      font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: border-color 0.15s, color 0.15s;
+    }
+    .btn-ghost:hover { border-color: #b5a99f; color: #2e2a26; }
+
+    /* Borderless text-style button — "+ Add process" */
+    .btn-add {
+      background: transparent; border: none; color: #b5a99f;
+      font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 500;
+      cursor: pointer; padding: 6px 0; transition: color 0.15s;
+    }
+    .btn-add:hover { color: #2e2a26; }
+
+    /* Small ✕ delete button on each process row */
+    .btn-del {
+      background: transparent; border: none; color: #d4c9c0;
+      cursor: pointer; font-size: 0.9rem; padding: 4px 8px; transition: color 0.15s;
+    }
+    .btn-del:hover { color: #c4847a; } /* turns reddish on hover as a warning */
+
+    /* ── UTILITY ──────────────────────────────────────────────────────────── */
+
+    /* Inline validation error message shown below the process table */
+    .error-msg { font-size: 0.8rem; color: #c4847a; margin-top: 10px; display: none; }
+
+    /* Hides elements that should only appear conditionally (e.g. priority column) */
+    .hidden { display: none !important; }
+
+    /* ── OUTPUT SECTION ───────────────────────────────────────────────────── */
+
+    /* Italic serif name of the selected algorithm shown above results */
+    .result-algo-name {
+      font-family: 'Instrument Serif', serif;
+      font-size: 1.3rem;
+      font-style: italic;
+      color: #7a6e66;
+      margin-bottom: 22px;
+    }
+
+    /* ── GANTT CHART ──────────────────────────────────────────────────────── */
+
+    /* Allows the Gantt to scroll horizontally on small screens */
+    .gantt-wrapper { overflow-x: auto; padding-bottom: 6px; }
+
+    /* Row of colored blocks, one per process run */
+    .gantt-chart {
+      display: flex;
+      align-items: stretch;
+      min-width: max-content;        /* prevents wrapping — the chart is one continuous row */
+      margin-bottom: 4px;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    /* A single colored block in the Gantt chart */
+    .gantt-block {
+      display: flex; align-items: center; justify-content: center;
+      min-width: 44px; height: 48px;
+      font-family: 'DM Sans', sans-serif; font-size: 0.78rem; font-weight: 600;
+      color: rgba(0,0,0,0.4);        /* semi-transparent text so it works on any pastel bg */
+      transition: filter 0.15s;
+    }
+    .gantt-block:hover { filter: brightness(0.93); }
+
+    /* IDLE block — shown when CPU is waiting for a process to arrive */
+    .gantt-block.idle { background: #ede7df !important; color: #b5a99f; }
+
+    /* The time tick numbers below the Gantt chart */
+    .gantt-timeline { display: flex; min-width: max-content; }
+    .gantt-tick { font-size: 0.62rem; color: #b5a99f; text-align: right; padding-right: 3px; }
+
+    /* ── RESULTS TABLE ────────────────────────────────────────────────────── */
+
+    /* Table showing per-process waiting time, turnaround, etc. */
+    .results-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+
+    /* Column headers — right-aligned (except the first "Process" column) */
+    .results-table th {
+      font-size: 0.64rem; font-weight: 600; text-transform: uppercase; letter-spacing: 2px;
+      color: #b5a99f; padding: 9px 14px; text-align: right; border-bottom: 1px solid #e4dbd3;
+    }
+    .results-table th:first-child { text-align: left; }
+
+    /* Data cells — right-aligned numbers */
+    .results-table td { padding: 9px 14px; text-align: right; border-bottom: 1px solid #f0e9e2; color: #4a4440; }
+    .results-table td:first-child { text-align: left; font-weight: 600; }
+
+    /* Remove bottom border from the very last row */
+    .results-table tr:last-child td { border-bottom: none; }
+
+    /* Average row at the bottom — slightly muted to distinguish from process rows */
+    .results-table .avg-row td { color: #9a8f86; font-size: 0.78rem; border-top: 1px solid #e4dbd3; font-weight: 400; }
+    .results-table .avg-row td:first-child { text-transform: uppercase; letter-spacing: 1.5px; font-size: 0.64rem; }
+
+    /* ── METRIC SUMMARY CARDS ─────────────────────────────────────────────── */
+
+    /* Two cards side by side showing avg waiting time and avg turnaround time */
+    .metric-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 28px; }
+
+    /* Individual metric card — white box with border */
+    .metric-card {
+      background: #fff; border: 1.5px solid #e4dbd3; border-radius: 12px; padding: 20px 22px;
+    }
+
+    /* Small label above the number (e.g. "Avg Waiting Time") */
+    .metric-label { font-size: 0.66rem; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; color: #b5a99f; margin-bottom: 6px; }
+
+    /* The large number itself */
+    .metric-value { font-family: 'Instrument Serif', serif; font-size: 2.4rem; color: #2e2a26; line-height: 1; }
+
+    /* ── RESPONSIVE ───────────────────────────────────────────────────────── */
+    @media (max-width: 560px) {
+      /* Stack metric cards vertically on small screens */
+      .metric-row { grid-template-columns: 1fr; }
+      /* Slightly smaller title on mobile */
+      .page-title { font-size: 1.8rem; }
+    }
+  </style>
+</head>
+<body>
+<!-- ── MAIN WRAPPER — everything lives inside this one div ────────────────── -->
+<div class="wrap">
+
+  <!-- Page title and course subtitle -->
+  <p class="page-title">CPU Scheduling Simulator</p>
+  <p class="page-sub">Operating Systems — Process Scheduling Case Study</p>
+
+  <!-- ── SECTION 1: ALGORITHM SELECTION ───────────────────────────────────── -->
+  <h2>Algorithm</h2>
+
+  <!-- Pill buttons — clicking one sets the active algorithm -->
+  <div class="algo-grid">
+    <button class="algo-btn active" onclick="selectAlgo('FCFS', this)">FCFS</button>
+    <button class="algo-btn" onclick="selectAlgo('SJF', this)">Shortest Job First</button>
+    <button class="algo-btn" onclick="selectAlgo('SRT', this)">Shortest Remaining Time</button>
+    <button class="algo-btn" onclick="selectAlgo('RR', this)">Round Robin</button>
+    <button class="algo-btn" onclick="selectAlgo('PRIORITY', this)">Priority (Non-Preemptive)</button>
+    <button class="algo-btn" onclick="selectAlgo('PRIORITY_RR', this)">Priority + Round Robin</button>
+  </div>
+
+  <!-- Extra inputs that only appear for certain algorithms -->
+  <div class="extra-controls">
+
+    <!-- Shown only for Round Robin and Priority + RR -->
+    <div id="quantum-group" class="form-group hidden">
+      <label>Time Quantum</label>
+      <input type="number" id="quantum" value="2" min="1" />
+    </div>
+
+    <!-- Shown only for Priority and Priority + RR -->
+    <div id="priority-order-group" class="form-group hidden">
+      <label>Priority Order</label>
+      <select id="priority-order">
+        <option value="lower">Lower number = Higher priority</option>
+        <option value="higher">Higher number = Higher priority</option>
+      </select>
+    </div>
+
+  </div>
+
+  <hr class="sep" />
+
+  <!-- ── SECTION 2: PROCESS INPUT ─────────────────────────────────────────── -->
+  <h2>Processes</h2>
+
+  <!-- Each row represents one process; rows are added/removed dynamically via JS -->
+  <table class="process-table">
+    <thead>
+      <tr>
+        <th>Process</th>
+        <th>Burst Time</th>
+        <!-- Priority column is hidden unless a priority-based algorithm is selected -->
+        <th id="priority-header" class="hidden">Priority</th>
+        <th>Arrival Time</th>
+        <th></th> <!-- empty column for the delete button -->
+      </tr>
+    </thead>
+    <!-- Process rows are injected here by addProcessRow() -->
+    <tbody id="process-tbody"></tbody>
+  </table>
+
+  <!-- Buttons: add a new row, reset everything, or run the simulation -->
+  <div class="action-row">
+    <button class="btn-add" onclick="addProcessRow()">+ Add process</button>
+    <button class="btn-ghost" onclick="resetAll()">Reset</button>
+    <button class="btn-run" onclick="runScheduler()">Run simulation</button>
+  </div>
+
+  <!-- Validation error message (hidden by default, shown if input is invalid) -->
+  <div class="error-msg" id="error-msg"></div>
+
+  <!-- ── SECTION 3: OUTPUT (hidden until simulation is run) ────────────────── -->
+  <div id="output-section" class="hidden">
+    <hr class="sep" />
+
+    <!-- Name of the algorithm that was just run (filled in by JS) -->
+    <p class="result-algo-name" id="algo-label"></p>
+
+    <!-- ── RESULTS TABLE ───────────────────────────────────────────────────── -->
+    <h2>Process Summary</h2>
+    <table class="results-table">
+      <thead>
+        <tr>
+          <th>Process</th>
+          <th>Burst</th>
+          <!-- Priority column only visible for priority-based algorithms -->
+          <th id="result-priority-header" class="hidden">Priority</th>
+          <th>Arrival</th>
+          <th>Finish</th>
+          <th>Waiting</th>
+          <th>Turnaround</th>
+        </tr>
+      </thead>
+      <!-- Per-process result rows + average row are injected here by JS -->
+      <tbody id="results-tbody"></tbody>
+    </table>
+
+    <!-- ── METRIC SUMMARY CARDS ────────────────────────────────────────────── -->
+    <div class="metric-row">
+      <div class="metric-card">
+        <div class="metric-label">Avg Waiting Time</div>
+        <!-- Value filled in by JS after simulation -->
+        <div class="metric-value" id="avg-wt">—</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Avg Turnaround Time</div>
+        <!-- Value filled in by JS after simulation -->
+        <div class="metric-value" id="avg-tat">—</div>
+      </div>
+    </div>
+
+    <hr class="sep" />
+
+    <!-- ── GANTT CHART ─────────────────────────────────────────────────────── -->
+    <h2>Gantt Chart</h2>
+    <div class="gantt-wrapper">
+      <!-- Colored blocks are injected here by JS, one per timeline segment -->
+      <div class="gantt-chart" id="gantt-chart"></div>
+      <!-- Time tick numbers below the chart (0, 2, 5, 8 ...) -->
+      <div class="gantt-timeline" id="gantt-timeline"></div>
+    </div>
+
+  </div>
+  <!-- end #output-section -->
+
+</div>
+<!-- end .wrap -->
+<script>
+var currentAlgo = "FCFS";
+var processCount = 0;
+var PROCESS_COLORS = [
+  "#b8d4f0","#a8dfbe","#f5c6a0","#f0b8c4","#c8b8e8",
+  "#a8d8d4","#f5d4a0","#d4c4f0","#b8e4c0","#f0c8b0"
+];
+
+window.onload = function() { addProcessRow(); addProcessRow(); addProcessRow(); };
+
+function selectAlgo(algo, btn) {
+  currentAlgo = algo;
+  document.querySelectorAll(".algo-btn").forEach(function(b){ b.classList.remove("active"); });
+  btn.classList.add("active");
+  var qg = document.getElementById("quantum-group");
+  (algo==="RR"||algo==="PRIORITY_RR") ? qg.classList.remove("hidden") : qg.classList.add("hidden");
+  var pg = document.getElementById("priority-order-group");
+  var ph = document.getElementById("priority-header");
+  if (algo==="PRIORITY"||algo==="PRIORITY_RR") { pg.classList.remove("hidden"); ph.classList.remove("hidden"); }
+  else { pg.classList.add("hidden"); ph.classList.add("hidden"); }
+  document.querySelectorAll(".priority-cell").forEach(function(c){
+    (algo==="PRIORITY"||algo==="PRIORITY_RR") ? c.classList.remove("hidden") : c.classList.add("hidden");
+  });
+}
+
+function addProcessRow() {
+  processCount++;
+  var pid = "P" + processCount;
+  var row = document.createElement("tr");
+  row.id = "row-" + pid;
+  var ph = (currentAlgo==="PRIORITY"||currentAlgo==="PRIORITY_RR") ? "" : "hidden";
+  row.innerHTML =
+    '<td class="pid-cell">'+pid+'</td>'+
+    '<td><input type="number" id="bt-'+pid+'" value="'+processCount+'" min="1"/></td>'+
+    '<td class="priority-cell '+ph+'"><input type="number" id="pr-'+pid+'" value="'+processCount+'" min="1"/></td>'+
+    '<td><input type="number" id="at-'+pid+'" value="0" min="0"/></td>'+
+    '<td><button class="btn-del" onclick="removeRow(\''+pid+'\')">✕</button></td>';
+  document.getElementById("process-tbody").appendChild(row);
+}
+
+function removeRow(pid) {
+  if (document.querySelectorAll("#process-tbody tr").length <= 3) { showError("Minimum of 3 processes required."); return; }
+  showError(""); var r = document.getElementById("row-"+pid); if(r) r.remove();
+}
+
+function resetAll() {
+  processCount = 0;
+  document.getElementById("process-tbody").innerHTML = "";
+  document.getElementById("output-section").classList.add("hidden");
+  showError(""); addProcessRow(); addProcessRow(); addProcessRow();
+}
+
+function showError(msg) {
+  var el = document.getElementById("error-msg");
+  el.textContent = msg; el.style.display = msg ? "block" : "none";
+}
+
+function getProcesses() {
+  var list = [];
+  document.querySelectorAll("#process-tbody tr").forEach(function(row) {
+    var pid = row.querySelector(".pid-cell").textContent;
+    var at = parseInt(document.getElementById("at-"+pid).value);
+    var bt = parseInt(document.getElementById("bt-"+pid).value);
+    var pri = document.getElementById("pr-"+pid);
+    var pr = pri ? parseInt(pri.value) : 0;
+    if (!isNaN(at) && !isNaN(bt) && bt>=1) list.push({pid:pid,at:at,bt:bt,priority:pr});
+  });
+  return list;
+}
+
+function runScheduler() {
+  showError("");
+  var processes = getProcesses();
+  if (processes.length < 2) { showError("Please enter at least 2 valid processes."); return; }
+  var quantum = parseInt(document.getElementById("quantum").value)||2;
+  var priorityOrder = document.getElementById("priority-order").value;
+  var timeline=[], result=[];
+  if      (currentAlgo==="FCFS")        timeline=runFCFS(processes,result);
+  else if (currentAlgo==="SJF")         timeline=runSJF(processes,result);
+  else if (currentAlgo==="SRT")         timeline=runSRT(processes,result);
+  else if (currentAlgo==="RR")          timeline=runRR(processes,quantum,result);
+  else if (currentAlgo==="PRIORITY")    timeline=runPriority(processes,priorityOrder,result);
+  else if (currentAlgo==="PRIORITY_RR") timeline=runPriorityRR(processes,quantum,priorityOrder,result);
+  drawOutput(timeline, result, processes);
+}
+
+// ─── HELPERS ────────────────────────────────────────────────────────────────
+
+// Add a Gantt block to the timeline
+function addBlock(tl, pid, start, end) {
+  tl.push({ pid: pid, start: start, end: end });
+}
+
+// If the CPU has nothing to run, add an IDLE block until the next arrival
+function addIdleIfNeeded(tl, t, processes, excludeList) {
+  var pending = processes.filter(function(p) { return excludeList.indexOf(p.pid) === -1; });
+  var nextArrival = pending.reduce(function(min, p) { return p.at < min ? p.at : min; }, Infinity);
+  if (nextArrival > t) addBlock(tl, "IDLE", t, nextArrival);
+  return nextArrival;
+}
+
+// Get all processes that have arrived and haven't finished yet
+function getReady(processes, t, excludeList) {
+  return processes.filter(function(p) { return p.at <= t && excludeList.indexOf(p.pid) === -1; });
+}
+
+// Record a completed process into the result array
+function recordResult(result, p, finishTime) {
+  result.push({ pid: p.pid, at: p.at, bt: p.bt, priority: p.priority, ft: finishTime });
+}
+
+// Merge back-to-back blocks of the same process into one
+function mergeTimeline(tl) {
+  if (!tl.length) return [];
+  var merged = [tl[0]];
+  for (var i = 1; i < tl.length; i++) {
+    var last = merged[merged.length - 1];
+    var curr = tl[i];
+    // If same process continues right after, just extend the previous block
+    if (last.pid === curr.pid && last.end === curr.start) {
+      last.end = curr.end;
+    } else {
+      merged.push(curr);
+    }
+  }
+  return merged;
+}
+
+// ─── ALGORITHM 1: FCFS ──────────────────────────────────────────────────────
+// Run processes in the order they arrive. No preemption.
+
+function runFCFS(processes, result) {
+  var tl = [];
+  var t = 0;
+
+  // Sort by arrival time so we process whoever came first
+  var sorted = processes.slice().sort(function(a, b) { return a.at - b.at; });
+
+  for (var i = 0; i < sorted.length; i++) {
+    var p = sorted[i];
+
+    // CPU is idle while waiting for this process to arrive
+    if (t < p.at) {
+      addBlock(tl, "IDLE", t, p.at);
+      t = p.at;
+    }
+
+    // Run the process to completion
+    addBlock(tl, p.pid, t, t + p.bt);
+    recordResult(result, p, t + p.bt);
+    t += p.bt;
+  }
+
+  return tl;
+}
+
+// ─── ALGORITHM 2: SJF ───────────────────────────────────────────────────────
+// Among arrived processes, always pick the one with the shortest burst. No preemption.
+
+function runSJF(processes, result) {
+  var tl = [];
+  var t = 0;
+  var done = [];
+
+  while (done.length < processes.length) {
+    var ready = getReady(processes, t, done);
+
+    if (!ready.length) {
+      // Nothing ready — jump to next arrival
+      t = addIdleIfNeeded(tl, t, processes, done);
+      continue;
+    }
+
+    // Pick the shortest job among ready processes
+    ready.sort(function(a, b) { return a.bt - b.bt; });
+    var p = ready[0];
+
+    addBlock(tl, p.pid, t, t + p.bt);
+    recordResult(result, p, t + p.bt);
+    t += p.bt;
+    done.push(p.pid);
+  }
+
+  return tl;
+}
+
+// ─── ALGORITHM 3: SRT ───────────────────────────────────────────────────────
+// Preemptive version of SJF. At every tick, the process with the least
+// remaining time runs. If a shorter job arrives, it takes over immediately.
+
+function runSRT(processes, result) {
+  var tl = [];
+  var t = 0;
+  var remaining = {};      // remaining burst time per process
+  var finishTime = {};
+  var finished = [];
+  var currentPid = null;   // which process is running right now
+  var blockStart = 0;      // when the current run started
+
+  // Initialize remaining time for each process
+  processes.forEach(function(p) { remaining[p.pid] = p.bt; });
+
+  while (finished.length < processes.length) {
+    var ready = getReady(processes, t, finished);
+
+    if (!ready.length) {
+      // Save any current block before going idle
+      if (currentPid) {
+        addBlock(tl, currentPid, blockStart, t);
+        currentPid = null;
+      }
+      t = addIdleIfNeeded(tl, t, processes, finished);
+      continue;
+    }
+
+    // Pick the process with the shortest remaining time
+    ready.sort(function(a, b) { return remaining[a.pid] - remaining[b.pid]; });
+    var p = ready[0];
+
+    // If a different process takes over, close the previous block
+    if (p.pid !== currentPid) {
+      if (currentPid) addBlock(tl, currentPid, blockStart, t);
+      currentPid = p.pid;
+      blockStart = t;
+    }
+
+    // Run for 1 tick
+    remaining[p.pid]--;
+    t++;
+
+    // If this process just finished, close its block
+    if (remaining[p.pid] === 0) {
+      addBlock(tl, p.pid, blockStart, t);
+      finishTime[p.pid] = t;
+      finished.push(p.pid);
+      currentPid = null;
+    }
+  }
+
+  processes.forEach(function(p) { recordResult(result, p, finishTime[p.pid]); });
+  return mergeTimeline(tl);
+}
+
+// ─── ALGORITHM 4: ROUND ROBIN ───────────────────────────────────────────────
+// Each process gets a fixed time slice (quantum). If not done, it goes
+// to the back of the queue.
+
+function runRR(processes, quantum, result) {
+  var tl = [];
+  var t = 0;
+  var remaining = {};
+  var finishTime = {};
+  var queue = [];       // order in which processes wait to run
+  var arrived = [];     // tracks who has joined the queue already
+  var finished = [];
+
+  processes.forEach(function(p) { remaining[p.pid] = p.bt; });
+
+  // Sort by arrival so we can enqueue in the right order
+  var sorted = processes.slice().sort(function(a, b) { return a.at - b.at; });
+
+  // Enqueue any processes that arrive at time 0
+  sorted.forEach(function(p) {
+    if (p.at <= t && arrived.indexOf(p.pid) === -1) {
+      queue.push(p.pid);
+      arrived.push(p.pid);
+    }
+  });
+
+  while (finished.length < processes.length) {
+    // If queue is empty, jump ahead to next arrival
+    if (!queue.length) {
+      var next = sorted.find(function(p) { return arrived.indexOf(p.pid) === -1; });
+      if (!next) break;
+      addBlock(tl, "IDLE", t, next.at);
+      t = next.at;
+      queue.push(next.pid);
+      arrived.push(next.pid);
+    }
+
+    var pid = queue.shift();
+    var runTime = Math.min(quantum, remaining[pid]);
+
+    // Run this process for its time slice
+    addBlock(tl, pid, t, t + runTime);
+    t += runTime;
+    remaining[pid] -= runTime;
+
+    // Enqueue any new arrivals that showed up during this slice
+    sorted.forEach(function(p) {
+      if (p.at <= t && arrived.indexOf(p.pid) === -1) {
+        queue.push(p.pid);
+        arrived.push(p.pid);
+      }
+    });
+
+    if (remaining[pid] === 0) {
+      // Process is done
+      finishTime[pid] = t;
+      finished.push(pid);
+    } else {
+      // Not done — send to the back of the queue
+      queue.push(pid);
+    }
+  }
+
+  processes.forEach(function(p) { recordResult(result, p, finishTime[p.pid]); });
+  return tl;
+}
+
+// ─── ALGORITHM 5: PRIORITY ──────────────────────────────────────────────────
+// Among arrived processes, pick the one with the best priority. No preemption.
+
+function runPriority(processes, priorityOrder, result) {
+  var tl = [];
+  var t = 0;
+  var done = [];
+
+  // Sort function: lower number = higher priority, or vice versa
+  function byPriority(a, b) {
+    return priorityOrder === "lower" ? a.priority - b.priority : b.priority - a.priority;
+  }
+
+  while (done.length < processes.length) {
+    var ready = getReady(processes, t, done);
+
+    if (!ready.length) {
+      t = addIdleIfNeeded(tl, t, processes, done);
+      continue;
+    }
+
+    // Pick highest-priority process
+    ready.sort(byPriority);
+    var p = ready[0];
+
+    addBlock(tl, p.pid, t, t + p.bt);
+    recordResult(result, p, t + p.bt);
+    t += p.bt;
+    done.push(p.pid);
+  }
+
+  return tl;
+}
+
+// ─── ALGORITHM 6: PRIORITY + ROUND ROBIN ────────────────────────────────────
+// Like Round Robin, but the queue is re-sorted by priority each cycle.
+
+function runPriorityRR(processes, quantum, priorityOrder, result) {
+  var tl = [];
+  var t = 0;
+  var remaining = {};
+  var finishTime = {};
+  var queue = [];
+  var arrived = [];
+  var finished = [];
+
+  processes.forEach(function(p) { remaining[p.pid] = p.bt; });
+
+  var sorted = processes.slice().sort(function(a, b) { return a.at - b.at; });
+
+  // Helper: get a process's priority value by pid
+  function getPriority(pid) {
+    var p = processes.find(function(x) { return x.pid === pid; });
+    return p ? p.priority : 0;
+  }
+
+  // Sort function for the queue
+  function byPriority(a, b) {
+    return priorityOrder === "lower" ? getPriority(a) - getPriority(b) : getPriority(b) - getPriority(a);
+  }
+
+  // Enqueue processes already arrived at t=0
+  sorted.forEach(function(p) {
+    if (p.at <= t && arrived.indexOf(p.pid) === -1) {
+      queue.push(p.pid);
+      arrived.push(p.pid);
+    }
+  });
+
+  while (finished.length < processes.length) {
+    // Sort queue by priority before picking next process
+    queue.sort(byPriority);
+
+    if (!queue.length) {
+      var next = sorted.find(function(p) { return arrived.indexOf(p.pid) === -1; });
+      if (!next) break;
+      addBlock(tl, "IDLE", t, next.at);
+      t = next.at;
+      queue.push(next.pid);
+      arrived.push(next.pid);
+    }
+
+    var pid = queue.shift();
+    var runTime = Math.min(quantum, remaining[pid]);
+
+    addBlock(tl, pid, t, t + runTime);
+    t += runTime;
+    remaining[pid] -= runTime;
+
+    // Enqueue new arrivals
+    sorted.forEach(function(p) {
+      if (p.at <= t && arrived.indexOf(p.pid) === -1) {
+        queue.push(p.pid);
+        arrived.push(p.pid);
+      }
+    });
+
+    if (remaining[pid] === 0) {
+      finishTime[pid] = t;
+      finished.push(pid);
+    } else {
+      queue.push(pid);
+    }
+  }
+
+  processes.forEach(function(p) { recordResult(result, p, finishTime[p.pid]); });
+  return tl;
+}
+
+function computeMetrics(result) {
+  result.forEach(function(r){r.tat=r.ft-r.at;r.wt=r.tat-r.bt;});
+  var n=result.length;
+  return {
+    avgWT:(result.reduce(function(s,r){return s+r.wt;},0)/n).toFixed(2),
+    avgTAT:(result.reduce(function(s,r){return s+r.tat;},0)/n).toFixed(2)
+  };
+}
+
+function buildColorMap(processes) {
+  var map={};
+  processes.forEach(function(p,i){map[p.pid]=PROCESS_COLORS[i%PROCESS_COLORS.length];});
+  return map;
+}
+
+function drawOutput(timeline, result, processes) {
+  computeMetrics(result);
+  var cm=buildColorMap(processes);
+  var out=document.getElementById("output-section");
+  out.classList.remove("hidden");
+
+  var names={
+    FCFS:"First-Come, First-Served (FCFS)",SJF:"Shortest Job First (SJF)",
+    SRT:"Shortest Remaining Time (SRT)",RR:"Round Robin (RR)",
+    PRIORITY:"Priority Scheduling",PRIORITY_RR:"Priority Scheduling with Round Robin"
+  };
+  document.getElementById("algo-label").textContent=names[currentAlgo]||currentAlgo;
+
+  var gc=document.getElementById("gantt-chart"),gt=document.getElementById("gantt-timeline");
+  gc.innerHTML="";gt.innerHTML="";
+  var uw=44;
+  timeline.forEach(function(b,i) {
+    var w=Math.max(uw,(b.end-b.start)*uw);
+    var d=document.createElement("div");
+    d.className="gantt-block";d.style.width=w+"px";d.style.minWidth=w+"px";
+    if(b.pid==="IDLE"){d.classList.add("idle");d.textContent="—";}
+    else{d.style.background=cm[b.pid]||"#ddd";d.textContent=b.pid;}
+    d.title=b.pid+" ["+b.start+" → "+b.end+"]";gc.appendChild(d);
+    if(i===0){var s=document.createElement("div");s.className="gantt-tick";s.style.width="0px";s.textContent=b.start;gt.appendChild(s);}
+    var tk=document.createElement("div");tk.className="gantt-tick";tk.style.width=w+"px";tk.style.textAlign="right";tk.textContent=b.end;gt.appendChild(tk);
+  });
+
+  var showP=currentAlgo==="PRIORITY"||currentAlgo==="PRIORITY_RR";
+  var rph=document.getElementById("result-priority-header");
+  showP?rph.classList.remove("hidden"):rph.classList.add("hidden");
+
+  var tbody=document.getElementById("results-tbody");tbody.innerHTML="";
+  result.forEach(function(r) {
+    var row=document.createElement("tr");
+    var dot='<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+(cm[r.pid]||"#ddd")+';margin-right:8px;vertical-align:middle"></span>';
+    var pc=showP?'<td>'+(r.priority!==undefined?r.priority:'—')+'</td>':'';
+    row.innerHTML='<td>'+dot+r.pid+'</td><td>'+r.bt+'</td>'+pc+'<td>'+r.at+'</td><td>'+r.ft+'</td><td>'+r.wt+'</td><td>'+r.tat+'</td>';
+    tbody.appendChild(row);
+  });
+  var avgs=computeMetrics(result);
+  var avgRow=document.createElement("tr");avgRow.className="avg-row";
+  var ac=showP?5:4;
+  avgRow.innerHTML='<td colspan="'+ac+'">Average</td><td>'+avgs.avgWT+'</td><td>'+avgs.avgTAT+'</td>';
+  tbody.appendChild(avgRow);
+  document.getElementById("avg-wt").textContent=avgs.avgWT;
+  document.getElementById("avg-tat").textContent=avgs.avgTAT;
+  out.scrollIntoView({behavior:"smooth"});
+}
+</script>
+</body>
+</html>
